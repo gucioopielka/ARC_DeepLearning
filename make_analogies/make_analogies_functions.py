@@ -213,21 +213,31 @@ def invert_colors(image: np.array) -> np.array:
     return inverted_image
 
 
-def plot_double_trio(double_trio: np.array, colormax = 1) -> np.array:
+def plot_double_trio(double_trio, colormax=1):
     plt.figure(figsize=(12, 4))
     fig, axs = plt.subplots(2, 3)
     ind = 0
     for i in range(2):
         for j in range(3):
-            axs[i, j].imshow(double_trio[ind], cmap='gray', vmin = 0, vmax = colormax)  # Replace 'imshow' with your preferred plotting function
+            ax = axs[i, j]
+            ax.imshow(double_trio[ind], cmap='gray', vmin=0, vmax=colormax)
+            ax.grid(True, which='both', color='lightgrey', linewidth=0.5)
+            ax.set_yticks([x-0.5 for x in range(1+len(double_trio[ind]))])
+            ax.set_xticks([x-0.5 for x in range(1+len(double_trio[ind][0]))])
+            ax.set_xticklabels([])
+            ax.set_yticklabels([])
+
             if ind == 5:
-                axs[i, j].set_title(f'TARGET')
+                ax.set_title(f'TARGET')
             elif i == 0:
-                axs[i, j].set_title(f'IMG {j+1}A')
+                ax.set_title(f'IMG {j+1}A')
             elif i == 1:
-                axs[i, j].set_title(f'IMG {j+1}B')
+                ax.set_title(f'IMG {j+1}B')
+                            
             ind += 1
+
     plt.show()
+
 
 
 def mirror_image(image: np.array, horizontal=True) -> np.array:
