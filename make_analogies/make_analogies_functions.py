@@ -213,7 +213,7 @@ def invert_colors(image: np.array) -> np.array:
     return inverted_image
 
 
-def plot_double_trio(double_trio, colormax=1):
+def plot_double_trio(double_trio, title, colormax=1):
     plt.figure(figsize=(12, 4))
     fig, axs = plt.subplots(2, 3)
     ind = 0
@@ -235,9 +235,8 @@ def plot_double_trio(double_trio, colormax=1):
                 ax.set_title(f'IMG {j+1}B')
                             
             ind += 1
-
+    plt.suptitle(title)
     plt.show()
-
 
 
 def mirror_image(image: np.array, horizontal=True) -> np.array:
