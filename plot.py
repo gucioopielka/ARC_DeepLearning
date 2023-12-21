@@ -1,5 +1,4 @@
 import os
-os.chdir('/Users/gustaw/Documents/ARC/simple_ARC')
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
@@ -12,8 +11,6 @@ with open("data/analogy_index.pkl", "rb") as f:
     analogy_index = pickle.load(file=f)
 with open("data/analogy_index_detailed.pkl", "rb") as f:
     analogy_index_detailed = pickle.load(file=f)
-
-rdm = np.load('data/rdms/rdm.npy')
 
 # Repeat 3 times (3 diff vectors per task)
 analogy_index = np.repeat(sorted(analogy_index),3)
@@ -29,11 +26,11 @@ analogy_detailed_idxs = np.append(analogy_detailed_idxs, len(analogy_index_detai
 analogy[1], analogy[2] = 'Count', 'Close_Far Edges'
 
 
-def plot_RDM_concept(rdm):
+def plot_RDM_concept(rdm, title='RDM', save=False):
     
     # Plot the RDM
     plt.imshow(1-rdm, cmap='coolwarm')
-    #plt.title(title, fontsize=14)
+    plt.title(title, fontsize=16)
 
     # Analogies local
     for i in range(len(analogy_detailed_idxs) - 1):
@@ -78,10 +75,10 @@ def plot_RDM_concept(rdm):
     plt.gca().set_yticklabels(analogy, fontsize=10)
 
     plt.tight_layout()
-    plt.show()
-
-plot_RDM_concept(rdm)
-
+    if save:
+        plt.savefig(f'data/plots/{title}', bbox_inches='tight', dpi=300)
+    if not save:
+        plt.show()
 
 def get_rule_sim_diagonal(rdm):
     rule_similarity = []
@@ -117,22 +114,31 @@ def get_rule_sim_off_diagonal(rdm):
     
     return pairs_df.sort_values(by='Similarity', ascending=False)
 
-def plot_rule_similarity(df):
+def plot_rule_similarity(df, title='RDM', save=False):
     plt.rcParams.update({'font.size': 18})
     plt.figure(figsize=(10, 6))
     norm = plt.Normalize(-1, 1)
     colors = cm.coolwarm(norm(df['Similarity']*2.8))
     plt.barh(df['Concept'], df['Similarity'], color=colors)
     plt.xlabel('Average Pairwise D Similarity')
-    plt.title('D Similarity per ARC Concept')
+    plt.title(title)
     plt.gca().invert_yaxis()  # To display the highest value at the top
     plt.gca().spines['top'].set_visible(False)
     plt.gca().spines['right'].set_visible(False)
     plt.gca().spines['left'].set_visible(False)
     plt.tick_params(axis='y', which='both', left=False)
-    plt.show()
+    if save:
+        plt.savefig(f'data/plots/{title}', bbox_inches='tight', dpi=300)
+    if not save:
+        plt.show()
 
-df_rule_diag = get_rule_sim_diagonal(1-rdm)
-plot_rule_similarity(df_rule_diag)
-df_rule_off_diag = get_rule_sim_off_diagonal(1-rdm)
-plot_rule_similarity(df_rule_off_diag.iloc[:7])
+for channel in range(1,10):
+    print(f'Channel {channel}')
+    rdm = np.load(f'data/rdms/channel_{channel}.npy')
+    plot_RDM_concept(rdm, title=f'RDM Channel {channel}', save=True)
+    df_rule_diag = get_rule_sim_diagonal(1-rdm)
+    plot_rule_similarity(df_rule_diag, title=f'Diagonal Similarity Channel {channel}', save=True)
+    df_rule_off_diag = get_rule_sim_off_diagonal(1-rdm)
+    plot_rule_similarity(df_rule_off_diag.iloc[:7], title=f'Off-diagonal Similarity Channel {channel}', save=True)
+
+

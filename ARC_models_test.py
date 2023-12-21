@@ -2,7 +2,7 @@ import os
 from tqdm import tqdm 
 import numpy as np
 import torch
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 import pickle
 from Models.model import VariationalAutoencoder
 from make_analogies.helper_functions import preprocess_simpleARC
@@ -77,4 +77,3 @@ for channel in range(1, 10):
     diff_vec = get_latent_vec(encoder, data_loader)
     rdm = get_RDM(diff_vec)
     np.save(f'data/rdms/channel_{channel}.npy', rdm)
-
