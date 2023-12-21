@@ -1,9 +1,3 @@
-#simple ARC files
-make_analogies/*
-!make_analogies/make_analogies.ipynb
-!make_analogies/make_analogies_functions.py
-!make_analogies/requirements.txt
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -133,3 +127,4 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+data/rdms/rdm.npy
