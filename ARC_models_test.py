@@ -1,5 +1,4 @@
 import os
-os.chdir('/Users/gustaw/Documents/ARC/simple_ARC')
 from tqdm import tqdm 
 import numpy as np
 import torch
