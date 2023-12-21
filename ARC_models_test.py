@@ -29,40 +29,53 @@ for i in range(len(analogy_idx_unique[0])):
     print(f'{analogy_idx_unique[0][i]} --- {analogy_idx_unique[1][i]}')
 
 
-# Load the model
-encoder = torch.load('Models/encoder.pt', map_location=device).eval()
-decoder = torch.load('Models/decoder.pt', map_location=device).eval()
+def get_data_loader(tasks, target_channel, batch_size):
 
-### Preprocess 
-n = len(tasks)
-# (n, 6, 10, 10) -> (n, 6, 10, 30, 30)
-tasks = np.stack([preprocess_simpleARC(task) for task in tasks]) 
-# Splitting into inputs and outputs and reshaping to (n*3, 10, 30, 30)
-inputs = tasks[:, :3, :, :].reshape((n*3, 10, 30, 30)) # First 3 are inputs
-outputs = tasks[:, 3:, :, :].reshape((n*3, 10, 30, 30)) # Last 3 are outputs
-inputs = torch.from_numpy(inputs).float()
-outputs = torch.from_numpy(outputs).float()
-dataset = torch.utils.data.TensorDataset(inputs, outputs)
-data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    n = len(tasks)
 
+    # Rescaling and one-hot encoding 
+    # (n, 6, 10, 10) -> (n, 6, 10, 30, 30)
+    target_channel = 2 # Channel to one-hot encode
+    tasks = np.stack([preprocess_simpleARC(task, target_channel=target_channel) for task in tasks]) 
 
-# Get the latent vectors for all the inputs and outputs
-with torch.no_grad():
-    diff_vec = []
-    for batch_idx, (input, output) in tqdm(enumerate(data_loader), total=len(data_loader)):
-        in_out = torch.cat((input, output), dim=0).to(device)
-        mu, logVar = encoder.encode(in_out)
-        mu_inp, mu_out = mu.chunk(2, dim=0)  # Split into input and output
-        diff = mu_out - mu_inp
-        diff_vec.append(diff.cpu().detach().numpy())
+    # Splitting into inputs and outputs and unrolling to (n*3, 10, 30, 30)
+    inputs = tasks[:, :3, :, :].reshape((n*3, 10, 30, 30)) # First 3 are inputs
+    outputs = tasks[:, 3:, :, :].reshape((n*3, 10, 30, 30)) # Last 3 are outputs
 
-diff_vec = np.concatenate(diff_vec, axis=0)
+    inputs = torch.from_numpy(inputs).float()
+    outputs = torch.from_numpy(outputs).float()
+    dataset = torch.utils.data.TensorDataset(inputs, outputs)
 
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
-# Convert to RDM
+def get_latent_vec(encoder, data_loader):
+
+    with torch.no_grad():
+        diff_vec = []
+        for batch_idx, (input, output) in tqdm(enumerate(data_loader), total=len(data_loader)):
+            in_out = torch.cat((input, output), dim=0).to(device)
+            mu, logVar = encoder.encode(in_out)
+            mu_inp, mu_out = mu.chunk(2, dim=0)  # Split into input and output
+            diff = mu_out - mu_inp
+            diff_vec.append(diff.cpu().detach().numpy())
+
+    return np.concatenate(diff_vec, axis=0)
+
 def get_RDM(mat):
     mat_flattened = np.reshape(mat, (mat.shape[0], -1))
     return pairwise_distances(mat_flattened, metric='cosine')
 
-rdm = get_RDM(diff_vec)
-np.save('data/rdms/rdm.npy', rdm)
+
+
+# Load the model
+encoder = torch.load('Models/encoder.pt', map_location=device).eval()
+decoder = torch.load('Models/decoder.pt', map_location=device).eval()
+
+# Run
+for channel in range(1, 10):
+    print(f'Channel {channel}')
+    data_loader = get_data_loader(tasks, target_channel=channel, batch_size=batch_size)
+    diff_vec = get_latent_vec(encoder, data_loader)
+    rdm = get_RDM(diff_vec)
+    np.save(f'data/rdms/channel_{channel}.npy', rdm)
+

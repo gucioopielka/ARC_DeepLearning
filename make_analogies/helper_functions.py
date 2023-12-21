@@ -21,64 +21,6 @@ device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
 our_data_dir = '/Users/gustaw/Documents/ARC'
 
-# Calculates how many pixels match between input and output
-def accuracy(X_inp, X_out, exclude_zero=False):
-    per_diff = []
-
-    # Option to exclude the color zero for accuarcy calculations
-    if exclude_zero:
-        for i in range(len(X_inp)):
-            raw_diff = np.count_nonzero(np.logical_and(X_inp[i] == X_out[i], X_inp[i] != 0))
-            (per_diff.append(raw_diff / np.count_nonzero(X_inp[i])) if np.count_nonzero(X_inp[i]) is not 0 else per_diff.append(0))
-
-    else:
-        for i in range(len(X_inp)):
-            raw_diff = np.count_nonzero(X_inp[i] == X_out[i])
-            per_diff.append(raw_diff / X_inp[i].size)
-
-    return per_diff
-
-# Retrieve original input and reconstructed output for a model in evaluation mode.
-def validate(model, eval_loader):
-    # Put model in evaluation mode and start reconstructions based on latent vector
-    model.eval()
-    with torch.no_grad():
-        for batch_idx, (input, output) in enumerate(eval_loader):
-            in_out = torch.cat((input, output), dim=0).to(device)
-            z_out, _ = model.encode(in_out)
-            out = model.decode(z_out)
-            for i in range(len(in_out)):
-                X_inp.append(reverse_one_hot_encoder(in_out[i].cpu().numpy()))
-                X_out.append(reverse_one_hot_encoder(out[i].cpu().numpy()))
-    return X_inp, X_out
-
-# Print fully and partially solved items (100% vs. 95%)
-def solved_tasks(X_inp, X_out):
-    per_diff = accuracy(X_inp, X_out)
-
-    full_comp = [i for i, e in enumerate(per_diff) if e == 1] # 100%
-    nfull_comp = [i for i, e in enumerate(per_diff) if 1 > e > 0.95] # 95%
-
-    # print(f'The approach fully solved:')
-    # print(*full_comp, sep = ', ')
-    # print(f'The approach nearly solved:')
-    # print(*nfull_comp, sep = ', ')
-    # print(f'Accuracy: {round(len(full_comp)/len(X_out)*100, 2)}%')
-
-    return full_comp, nfull_comp
-
-# Splits a list in half and returns each
-def split_list(a_list):
-    half = len(a_list)//2
-
-    return a_list[:half], a_list[half:]
-
-# Calculates the effect of convolution (amount, kernel, padding, stride) on the image dimensions (w x h)
-def convo_eff(w = 30, num = 1, k = 3, p = 0, s = 1):
-    for i in range(num):
-        w = ((w - k + (2*p))/s) + 1
-
-    return w
 
 # Padding of the ARC matrices for convolutional processing
 def padding(X, height=30, width=30, direction='norm'):
@@ -138,11 +80,21 @@ def reverse_scaling(X_orig, X_pred):
 
     return X_rev
 
-# One-Hot-Encoding (i.e., dummy coding) of ARC matrices for 10 colors (w x h x color)
-def one_hot_encoder(X):
-    one_hot = (np.arange(10) == X[..., None]).astype(int)
+def one_hot_encoder(X, target_channel=1):
+    # Ensure target_channel is within the valid range and not 0
+    if not 1 <= target_channel < 10:
+        raise ValueError("target_channel must be between 1 and 9")
 
-    return np.transpose(one_hot, axes = [2,0,1])
+    # Create a one-hot encoded matrix
+    one_hot = np.zeros((10,) + X.shape, dtype=int)
+
+    # Channel 0 encodes where X is 0
+    one_hot[0, X == 0] = 1
+
+    # Target_channel encodes where X is 1
+    one_hot[target_channel, X == 1] = 1
+
+    return one_hot
 
 # Reverse One-Hot-Encoding for easier visualization & final computations
 def reverse_one_hot_encoder(X):
@@ -323,14 +275,14 @@ class ARCDataset(Dataset):
         else:
             return inp, rule_id
         
-def preprocess_simpleARC(X_full):
+def preprocess_simpleARC(X_full, target_channel=1):
 
     X_full = X_full / 255
 
     X_full_mat = []
     for i in range(len(X_full)):
         X_sca = scaling(X_full[i], 30, 30)
-        X_one = one_hot_encoder(X_sca)
+        X_one = one_hot_encoder(X_sca, target_channel=target_channel)
         X_full_mat.append(X_one)
 
     return np.stack(X_full_mat)
