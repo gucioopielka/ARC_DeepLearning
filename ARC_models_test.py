@@ -7,6 +7,7 @@ import pickle
 from Models.model import VariationalAutoencoder
 from make_analogies.helper_functions import preprocess_simpleARC
 from sklearn.metrics import pairwise_distances
+from plot import *
 
 batch_size = 1024
 
@@ -30,14 +31,12 @@ for i in range(len(analogy_idx_unique[0])):
 
 def get_data_loader(tasks, target_channel, batch_size):
 
-    n = len(tasks)
-
     # Rescaling and one-hot encoding 
     # (n, 6, 10, 10) -> (n, 6, 10, 30, 30)
-    target_channel = 2 # Channel to one-hot encode
     tasks = np.stack([preprocess_simpleARC(task, target_channel=target_channel) for task in tasks]) 
 
     # Splitting into inputs and outputs and unrolling to (n*3, 10, 30, 30)
+    n = len(tasks)
     inputs = tasks[:, :3, :, :].reshape((n*3, 10, 30, 30)) # First 3 are inputs
     outputs = tasks[:, 3:, :, :].reshape((n*3, 10, 30, 30)) # Last 3 are outputs
 
@@ -65,15 +64,41 @@ def get_RDM(mat):
     return pairwise_distances(mat_flattened, metric='cosine')
 
 
+### Prepare the analogy names
 
-# Load the model
+# Repeat 3 times (3 diff vectors per task)
+analogy_index = np.repeat(sorted(analogy_index),3)
+analogy_index_detailed = np.repeat(sorted(analogy_index_detailed),3)
+
+# Get the start and end indices of the analogies
+analogy, analogy_idxs = np.unique(analogy_index, return_index=True)
+analogy_idxs = np.append(analogy_idxs, len(analogy_index))
+analogy_detailed, analogy_detailed_idxs = np.unique(analogy_index_detailed, return_index=True)
+analogy_detailed_idxs = np.append(analogy_detailed_idxs, len(analogy_index_detailed))
+
+# Swap 'Close_Far Edges' with 'Count' (alphabetical order of analogy_detailed differs)
+analogy[1], analogy[2] = 'Count', 'Close_Far Edges'
+
+analogy_set = (analogy, analogy_idxs, analogy_detailed_idxs)
+
+
+### Load the model
 encoder = torch.load('Models/encoder.pt', map_location=device).eval()
 decoder = torch.load('Models/decoder.pt', map_location=device).eval()
 
-# Run
-for channel in range(1, 10):
+
+### Run
+for channel in range(10):
     print(f'Channel {channel}')
     data_loader = get_data_loader(tasks, target_channel=channel, batch_size=batch_size)
     diff_vec = get_latent_vec(encoder, data_loader)
     rdm = get_RDM(diff_vec)
-    np.save(f'data/rdms/channel_{channel}.npy', rdm)
+
+    # Plot
+    plot_RDM_concept(rdm, analogy_set, title=f'RDM Channel {channel}', save=True)
+    df_rule_diag = get_rule_sim_diagonal(1-rdm, analogy_set)
+    plot_rule_similarity(df_rule_diag, title=f'Diagonal Similarity Channel {channel}', save=True)
+    df_rule_off_diag = get_rule_sim_off_diagonal(1-rdm, analogy_set)
+    plot_rule_similarity(df_rule_off_diag.iloc[:7], title=f'Off-diagonal Similarity Channel {channel}', save=True)
+
+

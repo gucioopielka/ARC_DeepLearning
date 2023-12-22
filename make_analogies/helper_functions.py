@@ -82,8 +82,8 @@ def reverse_scaling(X_orig, X_pred):
 
 def one_hot_encoder(X, target_channel=1):
     # Ensure target_channel is within the valid range and not 0
-    if not 1 <= target_channel < 10:
-        raise ValueError("target_channel must be between 1 and 9")
+    if target_channel > 9:
+        raise ValueError("target_channel must be between 0 and 9")
 
     # Create a one-hot encoded matrix
     one_hot = np.zeros((10,) + X.shape, dtype=int)
@@ -91,8 +91,9 @@ def one_hot_encoder(X, target_channel=1):
     # Channel 0 encodes where X is 0
     one_hot[0, X == 0] = 1
 
-    # Target_channel encodes where X is 1
-    one_hot[target_channel, X == 1] = 1
+    if target_channel != 0:
+        # Target_channel encodes where X is 1
+        one_hot[target_channel, X == 1] = 1
 
     return one_hot
 

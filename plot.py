@@ -1,32 +1,14 @@
-import os
 import numpy as np
-import pickle
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import pandas as pd
 from itertools import combinations
 import matplotlib.cm as cm
 
-with open("data/analogy_index.pkl", "rb") as f:
-    analogy_index = pickle.load(file=f)
-with open("data/analogy_index_detailed.pkl", "rb") as f:
-    analogy_index_detailed = pickle.load(file=f)
 
-# Repeat 3 times (3 diff vectors per task)
-analogy_index = np.repeat(sorted(analogy_index),3)
-analogy_index_detailed = np.repeat(sorted(analogy_index_detailed),3)
+def plot_RDM_concept(rdm, analogy_set, title='RDM', save=False):
 
-# Get the start and end indices of the analogies
-analogy, analogy_idxs = np.unique(analogy_index, return_index=True)
-analogy_idxs = np.append(analogy_idxs, len(analogy_index))
-analogy_detailed, analogy_detailed_idxs = np.unique(analogy_index_detailed, return_index=True)
-analogy_detailed_idxs = np.append(analogy_detailed_idxs, len(analogy_index_detailed))
-
-# Swap 'Close_Far Edges' with 'Count' (alphabetical order of analogy_detailed differs)
-analogy[1], analogy[2] = 'Count', 'Close_Far Edges'
-
-
-def plot_RDM_concept(rdm, title='RDM', save=False):
+    analogy, analogy_idxs, analogy_detailed_idxs = analogy_set
     
     # Plot the RDM
     plt.imshow(1-rdm, cmap='coolwarm')
@@ -79,15 +61,21 @@ def plot_RDM_concept(rdm, title='RDM', save=False):
         plt.savefig(f'data/plots/{title}', bbox_inches='tight', dpi=300)
     if not save:
         plt.show()
+    plt.close()
 
-def get_rule_sim_diagonal(rdm):
+def get_rule_sim_diagonal(rdm, analogy_set):
+
+    analogy, analogy_idxs, analogy_detailed_idxs = analogy_set
+
     rule_similarity = []
     for i in range(len(analogy_idxs) - 1):
         rule_similarity.append(np.mean(rdm[analogy_idxs[i]:analogy_idxs[i+1], analogy_idxs[i]:analogy_idxs[i+1]]))
 
     return pd.DataFrame({'Concept' : analogy, 'Similarity' : rule_similarity}).sort_values(by='Similarity', ascending=False)
 
-def get_rule_sim_off_diagonal(rdm):
+def get_rule_sim_off_diagonal(rdm, analogy_set):
+
+    analogy, analogy_idxs, analogy_detailed_idxs = analogy_set
     
     # Relate concepts to their RDM indices
     concept_indices = []
@@ -131,14 +119,6 @@ def plot_rule_similarity(df, title='RDM', save=False):
         plt.savefig(f'data/plots/{title}', bbox_inches='tight', dpi=300)
     if not save:
         plt.show()
-
-for channel in range(1,10):
-    print(f'Channel {channel}')
-    rdm = np.load(f'data/rdms/channel_{channel}.npy')
-    plot_RDM_concept(rdm, title=f'RDM Channel {channel}', save=True)
-    df_rule_diag = get_rule_sim_diagonal(1-rdm)
-    plot_rule_similarity(df_rule_diag, title=f'Diagonal Similarity Channel {channel}', save=True)
-    df_rule_off_diag = get_rule_sim_off_diagonal(1-rdm)
-    plot_rule_similarity(df_rule_off_diag.iloc[:7], title=f'Off-diagonal Similarity Channel {channel}', save=True)
+    plt.close()
 
 
