@@ -80,13 +80,15 @@ def reverse_scaling(X_orig, X_pred):
 
     return X_rev
 
-def one_hot_encoder(X, target_channel=1):
-    # Ensure target_channel is within the valid range and not 0
+def one_hot_encoder(X,
+                    n_channels=10, 
+                    target_channel=1):
+    
     if target_channel > 9:
         raise ValueError("target_channel must be between 0 and 9")
 
     # Create a one-hot encoded matrix
-    one_hot = np.zeros((10,) + X.shape, dtype=int)
+    one_hot = np.zeros((n_channels,) + X.shape, dtype=int)
 
     # Channel 0 encodes where X is 0
     one_hot[0, X == 0] = 1
@@ -276,15 +278,129 @@ class ARCDataset(Dataset):
         else:
             return inp, rule_id
         
-def preprocess_simpleARC(X_full, target_channel=1):
+def preprocess_simpleARC(X_full, 
+                         n_channels=10,
+                         target_channel=1):
 
     X_full = X_full / 255
 
     X_full_mat = []
     for i in range(len(X_full)):
         X_sca = scaling(X_full[i], 30, 30)
-        X_one = one_hot_encoder(X_sca, target_channel=target_channel)
+        X_one = one_hot_encoder(X_sca, 
+                                n_channels=n_channels, 
+                                target_channel=target_channel)
         X_full_mat.append(X_one)
 
     return np.stack(X_full_mat)
-        
+
+def sort_analogies(tasks, 
+                   indices):
+
+    # Sort the indices and tasks according to indices alphabetically
+    tasks = [i for i in tasks] # convert to list
+    paired_sorted = sorted(zip(indices, tasks), key=lambda pair: pair[0])
+    analogy_idx, tasks = zip(*paired_sorted)
+    analogy_idx, tasks= np.array(analogy_idx), np.array(tasks)
+
+    print('Analogy counts:')
+    analogy_idx_unique = np.unique(analogy_idx, return_counts=True)
+    for i in range(len(analogy_idx_unique[0])):
+        print(f'{analogy_idx_unique[0][i]} --- {analogy_idx_unique[1][i]}')
+
+    return tasks, analogy_idx
+
+def encode_analogy(analogy_idx):
+    '''Encode the (sorted or unsorted) analogy index into integers'''
+    unique_strings = np.unique(analogy_idx)
+    string_to_int = {string: i for i, string in enumerate(unique_strings)}
+    encoded_array = np.array([string_to_int[item] for item in analogy_idx])
+    return encoded_array
+
+
+class SimpleARC_Dataset(Dataset):
+    def __init__(self, inputs, outputs, indices):
+        assert inputs.shape[0] == outputs.shape[0]
+        self.inputs = inputs
+        self.outputs = outputs
+        self.indices = indices
+
+    def __len__(self):
+        return self.inputs.shape[0]
+
+    def __getitem__(self, idx):
+        return self.inputs[idx], self.outputs[idx], self.indices[idx]
+    
+def get_data_loader(tasks, 
+                    indices, 
+                    batch_size, 
+                    target_channel,
+                    shuffle=False,
+                    n_channels=10):
+
+    # Rescaling and one-hot encoding 
+    # (n, 6, 10, 10) -> (n, 6, 10, 30, 30)
+    tasks = np.stack([preprocess_simpleARC(task, n_channels=n_channels, target_channel=target_channel) for task in tasks]) 
+
+    # Splitting into inputs and outputs and unrolling to (n*3, 10, 30, 30)
+    n = len(tasks)
+    inputs = tasks[:, :3, :, :].reshape((n*3, 10, 30, 30)) # First 3 are inputs
+    outputs = tasks[:, 3:, :, :].reshape((n*3, 10, 30, 30)) # Last 3 are outputs
+    indices = np.repeat(indices, 3)
+
+    inputs = torch.from_numpy(inputs).float()
+    outputs = torch.from_numpy(outputs).float()
+    indices = torch.from_numpy(indices).float() 
+    dataset = SimpleARC_Dataset(inputs, outputs, indices)
+
+    return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
+
+
+def pairwise_cosine_sim(vec):
+    # Normalize to unit vectors
+    epsilon = 1e-8  # Add a small value to avoid division by zero
+    norms = vec.norm(p=2, dim=1, keepdim=True) + epsilon
+    vec_normalized = vec / norms
+    # Similarity
+    sim_matrix = torch.mm(vec_normalized, vec_normalized.t())
+    # Get the upper triangle without the diagonal (k=1)
+    sim_values = sim_matrix[torch.triu_indices(sim_matrix.size(0), sim_matrix.size(1), offset=1)]
+    # Average cosine distance
+    return 1 - sim_values.mean()
+
+def calculate_d_penalty(mu, rule_ids):
+    mu_inp, mu_out = mu.chunk(2, dim=0)  # Split into input and output
+    unique_rules = rule_ids.unique()  # Get unique rules
+    d_penalties = [] # Initialize list to store D penalties for each rule
+
+    for rule in unique_rules:
+        # Get the indices for the current rule
+        current_rule_indices = (rule_ids == rule).nonzero(as_tuple=True)[0]
+
+        # Extract mu for the current rule using the indices
+        rule_mu_inp = mu_inp[current_rule_indices]
+        rule_mu_out = mu_out[current_rule_indices]
+
+        # Calculate the D's as differences of mu (mean representation in latent space)
+        if current_rule_indices.numel() > 1: 
+            diff = rule_mu_out - rule_mu_inp
+            d_penalties.append(pairwise_cosine_sim(diff))
+
+    return torch.stack(d_penalties).nanmean(), torch.stack(d_penalties)
+
+def validate_d_penalty(model, mode):
+    model.eval()
+
+    if mode == 'training':
+        data_loader = data_load(X_training, y_training, inp_index[:split], aug=[False]*3, batch_size=1000)
+    elif mode == 'validation':
+        data_loader = data_load(X_validation, y_validation, inp_index[split:], aug=[False]*3, batch_size=1000)
+    
+    with torch.no_grad():
+        input, output, rule_ids = next(iter(data_loader))
+        in_out = torch.cat((input, output), dim=0).to(device)
+        out, mu, logVar = model(in_out)
+        _, d_pos = calculate_d_penalty(mu, rule_ids)
+        _, d_neg = contrastive_d_loss(mu, rule_ids)
+    
+    return d_pos, d_neg
