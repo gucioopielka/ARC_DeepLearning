@@ -296,8 +296,7 @@ def preprocess_simpleARC(X_full,
 
 def sort_analogies(tasks, 
                    indices):
-
-    # Sort the indices and tasks according to indices alphabetically
+    '''Sort the indices and tasks according to indices alphabetically'''
     tasks = [i for i in tasks] # convert to list
     paired_sorted = sorted(zip(indices, tasks), key=lambda pair: pair[0])
     analogy_idx, tasks = zip(*paired_sorted)
@@ -386,21 +385,49 @@ def calculate_d_penalty(mu, rule_ids):
             diff = rule_mu_out - rule_mu_inp
             d_penalties.append(pairwise_cosine_sim(diff))
 
-    return torch.stack(d_penalties).nanmean(), torch.stack(d_penalties)
+    return torch.stack(d_penalties).nanmean()
 
-def validate_d_penalty(model, mode):
+
+def accuracy(X_inp, X_out, exclude_zero=False):
+    per_diff = []
+
+    # Option to exclude the color zero for accuarcy calculations
+    if exclude_zero:
+        for i in range(len(X_inp)):
+            raw_diff = np.count_nonzero(np.logical_and(X_inp[i] == X_out[i], X_inp[i] != 0))
+            (per_diff.append(raw_diff / np.count_nonzero(X_inp[i])) if np.count_nonzero(X_inp[i]) != 0 else per_diff.append(0))
+
+    else:
+        for i in range(len(X_inp)):
+            raw_diff = np.count_nonzero(X_inp[i] == X_out[i])
+            per_diff.append(raw_diff / X_inp[i].size)
+
+    return per_diff
+
+def validate_d_penalty(model, valid_loader):
     model.eval()
-
-    if mode == 'training':
-        data_loader = data_load(X_training, y_training, inp_index[:split], aug=[False]*3, batch_size=1000)
-    elif mode == 'validation':
-        data_loader = data_load(X_validation, y_validation, inp_index[split:], aug=[False]*3, batch_size=1000)
-    
+    d_pos = []
     with torch.no_grad():
-        input, output, rule_ids = next(iter(data_loader))
-        in_out = torch.cat((input, output), dim=0).to(device)
-        out, mu, logVar = model(in_out)
-        _, d_pos = calculate_d_penalty(mu, rule_ids)
-        _, d_neg = contrastive_d_loss(mu, rule_ids)
+        for batch_idx, (input, output, rule_ids) in enumerate(valid_loader):
+            in_out = torch.cat((input, output), dim=0).to(device)
+            out, mu, logVar = model(in_out)
+            d_pos.append(calculate_d_penalty(mu, rule_ids))
     
-    return d_pos, d_neg
+    return np.mean(d_pos)
+
+def validate_reconstruction(model, valid_loader):
+    # Put model in evaluation mode and start reconstructions based on latent vector
+    model.eval()
+    X_inp, X_out = [], []
+    with torch.no_grad():
+        for batch_idx, (input, output, rule_ids) in enumerate(valid_loader):
+            in_out = torch.cat((input, output), dim=0).to(device)
+            out, mu, logVar = model(in_out)
+            for i in range(len(in_out)):
+                X_inp.append(reverse_one_hot_encoder(in_out[i].cpu().numpy()))
+                X_out.append(reverse_one_hot_encoder(out[i].cpu().numpy()))
+    
+    acc_inc_zero = np.mean(accuracy(X_inp, X_out, exclude_zero=False))
+    acc_non_zero = np.mean(accuracy(X_inp, X_out, exclude_zero=True))
+
+    return acc_inc_zero, acc_non_zero

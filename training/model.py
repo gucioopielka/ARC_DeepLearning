@@ -1,6 +1,11 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
+import torch.distributions
+from torch.optim import AdamW 
+import torch.nn.functional as F
+from make_analogies.helper_functions import calculate_d_penalty, validate_reconstruction
+
 
 class VariationalAutoencoder(nn.Module):
     def __init__(self, img_channels=10, feature_dim=[128, 2, 2], latent_dim=128, use_dropout=False):
@@ -91,3 +96,53 @@ class VariationalAutoencoder(nn.Module):
         z = self.reparameterize(mu, logVar)
         out = self.decode(z)
         return out, mu, logVar
+    
+
+def train_encoder(model, 
+          train_loader, 
+          valid_loader,
+          epochs=50, 
+          rule_lambda=5e4, 
+          lr=1e-3, 
+          loss_fn = 'reconstruction + d',
+          device='cuda'):
+    optimizer = AdamW(model.parameters(), lr, weight_decay=0.2)
+    
+    for epoch in range(epochs):
+        model.train()
+        for batch_idx, (input, output, rule_ids) in enumerate(train_loader):
+
+            print(batch_idx)
+
+            # Combine input & output, adding noise, attaching to device
+            in_out = torch.cat((input, output), dim=0)
+            in_out = in_out.to(device)
+
+            # Feeding a batch of images into the network to obtain the output image, mu, and logVar
+            out, mu, logVar = model(in_out)
+
+            kl_divergence = -0.5 * torch.sum(1 + logVar - mu.pow(2) - logVar.exp())
+            bce = F.binary_cross_entropy(out, in_out, reduction='sum') 
+
+            if loss_fn == 'reconstruction + d':
+                d_positive = calculate_d_penalty(mu, rule_ids)
+                loss = bce + kl_divergence + rule_lambda*d_positive
+            elif loss_fn == 'reconstruction':
+                loss = bce + kl_divergence
+
+            print(loss)
+
+            # Backpropagation based on the loss
+            optimizer.zero_grad()
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
+            optimizer.step()
+        
+        print(f'Epoch {epoch+1}: Loss {round(bce.item() + kl_divergence.item(), 2)} - D {round(d_positive.item(), 2)}')
+
+        acc_zero_train, acc_non_zero_train, = validate_reconstruction(model, train_loader)
+        acc_zero_valid, acc_non_zero_valid, = validate_reconstruction(model, valid_loader)
+        
+        print('All Pixels : {0:.2f} ({2:.2f})% - Non-Zero Pixels : {1:.2f} ({3:.2f})%'.format(acc_zero_train*100, acc_non_zero_train*100, acc_zero_valid*100, acc_non_zero_valid*100))
+
+    return model
