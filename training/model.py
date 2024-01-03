@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.distributions
 from torch.optim import AdamW 
 import torch.nn.functional as F
-from make_analogies.helper_functions import calculate_d_penalty, validate_reconstruction
+from make_analogies.helper_functions import calculate_d_penalty, validate_reconstruction, validate_d_penalty
 
 
 class VariationalAutoencoder(nn.Module):
@@ -112,8 +112,6 @@ def train_encoder(model,
         model.train()
         for batch_idx, (input, output, rule_ids) in enumerate(train_loader):
 
-            print(batch_idx)
-
             # Combine input & output, adding noise, attaching to device
             in_out = torch.cat((input, output), dim=0)
             in_out = in_out.to(device)
@@ -130,15 +128,14 @@ def train_encoder(model,
             elif loss_fn == 'reconstruction':
                 loss = bce + kl_divergence
 
-            print(loss)
-
             # Backpropagation based on the loss
             optimizer.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
             optimizer.step()
         
-        print(f'Epoch {epoch+1}: Loss {round(bce.item() + kl_divergence.item(), 2)} - D {round(d_positive.item(), 2)}')
+        d_valid = validate_d_penalty(model, valid_loader)
+        print(f'Epoch {epoch+1}: Loss {round(bce.item() + kl_divergence.item(), 2)} - D {round(d_positive.item(), 2)} ({round(d_valid.item(), 2)})')
 
         acc_zero_train, acc_non_zero_train, = validate_reconstruction(model, train_loader)
         acc_zero_valid, acc_non_zero_valid, = validate_reconstruction(model, valid_loader)

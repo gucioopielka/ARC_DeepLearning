@@ -314,11 +314,11 @@ def encode_analogy(analogy_idx):
     unique_strings = np.unique(analogy_idx)
     string_to_int = {string: i for i, string in enumerate(unique_strings)}
     encoded_array = np.array([string_to_int[item] for item in analogy_idx])
-    return encoded_array
+    return encoded_array,
 
 
 class SimpleARC_Dataset(Dataset):
-    def __init__(self, inputs, outputs, indices):
+    def __init__(self, inputs, outputs, indices=None):
         assert inputs.shape[0] == outputs.shape[0]
         self.inputs = inputs
         self.outputs = outputs
@@ -328,12 +328,15 @@ class SimpleARC_Dataset(Dataset):
         return self.inputs.shape[0]
 
     def __getitem__(self, idx):
-        return self.inputs[idx], self.outputs[idx], self.indices[idx]
+        if self.indices is not None:
+            return self.inputs[idx], self.outputs[idx], self.indices[idx]
+        else:
+            return self.inputs[idx], self.outputs[idx]
     
 def get_data_loader(tasks, 
-                    indices, 
-                    batch_size, 
                     target_channel,
+                    batch_size, 
+                    indices=None, 
                     shuffle=False,
                     n_channels=10):
 
@@ -345,11 +348,14 @@ def get_data_loader(tasks,
     n = len(tasks)
     inputs = tasks[:, :3, :, :].reshape((n*3, 10, 30, 30)) # First 3 are inputs
     outputs = tasks[:, 3:, :, :].reshape((n*3, 10, 30, 30)) # Last 3 are outputs
-    indices = np.repeat(indices, 3)
+    if indices is not None:
+        indices = np.repeat(indices, 3)
 
     inputs = torch.from_numpy(inputs).float()
     outputs = torch.from_numpy(outputs).float()
-    indices = torch.from_numpy(indices).float() 
+    if indices is not None:
+        indices = torch.from_numpy(indices).float() 
+
     dataset = SimpleARC_Dataset(inputs, outputs, indices)
 
     return torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=shuffle)
@@ -413,7 +419,7 @@ def validate_d_penalty(model, valid_loader):
             out, mu, logVar = model(in_out)
             d_pos.append(calculate_d_penalty(mu, rule_ids))
     
-    return np.mean(d_pos)
+    return torch.stack(d_pos).nanmean()
 
 def validate_reconstruction(model, valid_loader):
     # Put model in evaluation mode and start reconstructions based on latent vector
@@ -431,3 +437,21 @@ def validate_reconstruction(model, valid_loader):
     acc_non_zero = np.mean(accuracy(X_inp, X_out, exclude_zero=True))
 
     return acc_inc_zero, acc_non_zero
+
+def get_latent_vec(encoder, data_loader):
+    encoder.eval()
+
+    with torch.no_grad():
+        diff_vec = []
+        for batch_idx, (input, output) in tqdm(enumerate(data_loader), total=len(data_loader)):
+            in_out = torch.cat((input, output), dim=0).to(device)
+            mu, logVar = encoder.encode(in_out)
+            mu_inp, mu_out = mu.chunk(2, dim=0)  # Split into input and output
+            diff = mu_out - mu_inp
+            diff_vec.append(diff.cpu().detach().numpy())
+
+    return np.concatenate(diff_vec, axis=0)
+
+def get_RDM(mat):
+    mat_flattened = np.reshape(mat, (mat.shape[0], -1))
+    return pairwise_distances(mat_flattened, metric='cosine')
