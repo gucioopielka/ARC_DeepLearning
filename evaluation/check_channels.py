@@ -35,6 +35,9 @@ _, tasks, _, global_index, _, local_index = train_test_split(
 # Sort the local_index and tasks according to local_index, alphabetically
 tasks, local_index = sort_analogies(tasks, local_index)
 
+# Prepare the analogy names for plotting
+analogy_set = preprocess_analogy_names(global_index, local_index) 
+
 
 ### LOAD MODEL
 encoder = torch.load('data/models/encoder_fullARC.pth', map_location=device).eval()
@@ -55,7 +58,6 @@ for target_channel in range(10):
 
 
     ### PLOT
-    analogy_set = preprocess_analogy_names(global_index, local_index) # Prepare the analogy names for plotting
 
     plot_RDM_concept(rdm, analogy_set, title=f'RDM Channel {target_channel}', save=True)
     
