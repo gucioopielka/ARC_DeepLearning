@@ -7,16 +7,16 @@ import pickle
 from Models.model import VariationalAutoencoder
 from make_analogies.helper_functions import preprocess_simpleARC
 from sklearn.metrics import pairwise_distances
-from plot import *
+from evaluation.plot import *
 
 batch_size = 1024
 
-with open("data/nonduplicates.pkl", "rb") as f:
+with open("data/analogy_11000_tasks.pkl", "rb") as f:
     tasks = pickle.load(file=f)
-with open("data/analogy_index.pkl", "rb") as f:
-    analogy_index = pickle.load(file=f)
-with open("data/analogy_index_detailed.pkl", "rb") as f:
-    analogy_index_detailed = pickle.load(file=f)
+with open("data/analogy_11000_index_global.pkl", "rb") as f:
+    global_index = pickle.load(file=f)
+with open("data/analogy_11000_index_local.pkl", "rb") as f:
+    local_index = pickle.load(file=f)
 
 # Sort the analogy_index_detailed and tasks according to analogy_index_detailed
 tasks = [i for i in tasks] # convert to list

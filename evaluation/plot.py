@@ -128,15 +128,14 @@ def preprocess_analogy_names(global_index, local_index):
     global_analog = np.repeat(sorted(global_index),3)
     local_analog = np.repeat(sorted(local_index),3)
 
-    global_analog = np.where(global_analog == 'Count', 'Close_Far Edges', 
-                             np.where(global_analog == 'Close_Far Edges', 'Count', 
-                                      global_analog))
+    # global_analog = np.where(global_analog == 'Count', 'Close_Far Edges', 
+    #                          np.where(global_analog == 'Close_Far Edges', 'Count', 
+    #                                   global_analog))
 
     n_items = len(global_analog)
 
     # Get the start and end indices of the analogies
     global_analog, global_analog_idxs = np.unique(global_analog, return_index=True)
-    global_analog = global_analog[np.argsort(global_analog_idxs)]
     global_analog_idxs = np.append(global_analog_idxs, n_items)
 
     local_analog, local_analog_idxs = np.unique(local_analog, return_index=True)
@@ -147,19 +146,19 @@ def preprocess_analogy_names(global_index, local_index):
 
     return global_analog, global_analog_idxs, local_analog_idxs
 
-unique_without_sorting(global_analog)
+# unique_without_sorting(global_analog)
 
-def unique_without_sorting(arr):
-    unique_dict = {}
-    for idx, elem in enumerate(arr):
-        if elem not in unique_dict:
-            unique_dict[elem] = idx
-    unique_vals = np.array(list(unique_dict.keys()), dtype=arr.dtype)
-    first_indices = np.array(list(unique_dict.values()))
-    return unique_vals, first_indices
+# def unique_without_sorting(arr):
+#     unique_dict = {}
+#     for idx, elem in enumerate(arr):
+#         if elem not in unique_dict:
+#             unique_dict[elem] = idx
+#     unique_vals = np.array(list(unique_dict.keys()), dtype=arr.dtype)
+#     first_indices = np.array(list(unique_dict.values()))
+#     return unique_vals, first_indices
 
 
-np.unique(global_analog, return_counts=True)
-np.unique(local_analog, return_counts=True)
+# np.unique(global_analog, return_counts=True)
+# np.unique(local_analog, return_counts=True)
 
 
